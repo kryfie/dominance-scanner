@@ -138,25 +138,48 @@ def forward_to_sheets(payload):
                 allow_redirects=True,
             )
 
-            body = response.text[:1000]
+            body = response.text[:2000]
 
             if 200 <= response.status_code < 300:
-                log.info(
-                    "SHEETS_OK status=%s attempt=%s body=%s",
-                    response.status_code,
-                    attempt,
-                    body,
-                )
-                with state_lock:
-                    last_forward_status = {
-                        "ok": True,
-                        "message": f"Sheets accepted snapshot. HTTP {response.status_code}",
-                        "updated_at": utc_now_iso(),
-                    }
-                return
+                # Apps Script ContentService commonly returns HTTP 200 even when
+                # our doPost() reports an application-level error in JSON.
+                app_ok = None
+                app_message = body
 
-            error = f"Sheets HTTP {response.status_code}: {body}"
-            log.warning("SHEETS_REJECTED attempt=%s %s", attempt, error)
+                try:
+                    parsed = response.json()
+                    app_ok = parsed.get("ok")
+                    if app_ok is False:
+                        app_message = parsed.get("error") or body
+                except ValueError:
+                    parsed = None
+
+                if app_ok is False:
+                    error = (
+                        f"Sheets application error despite HTTP "
+                        f"{response.status_code}: {app_message}"
+                    )
+                    log.warning("SHEETS_APP_ERROR attempt=%s %s", attempt, error)
+                else:
+                    log.info(
+                        "SHEETS_OK status=%s attempt=%s body=%s",
+                        response.status_code,
+                        attempt,
+                        body,
+                    )
+                    with state_lock:
+                        last_forward_status = {
+                            "ok": True,
+                            "message": (
+                                f"Sheets accepted snapshot. "
+                                f"HTTP {response.status_code}"
+                            ),
+                            "updated_at": utc_now_iso(),
+                        }
+                    return
+            else:
+                error = f"Sheets HTTP {response.status_code}: {body}"
+                log.warning("SHEETS_REJECTED attempt=%s %s", attempt, error)
 
         except requests.RequestException as exc:
             error = f"{type(exc).__name__}: {exc}"
