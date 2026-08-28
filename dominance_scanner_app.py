@@ -20,7 +20,11 @@ SHEETS_WEB_APP_URL = os.getenv("SHEETS_WEB_APP_URL", "").strip()
 SHEETS_SECRET = os.getenv("SHEETS_SECRET", "").strip()
 TV_WEBHOOK_TOKEN = os.getenv("TV_WEBHOOK_TOKEN", "").strip()
 
-EXPECTED_SCANNER = "DOMINANCE_RS_M5"
+ALLOWED_SCANNERS = {
+    "DOMINANCE_RS_M5",
+    "DOMINANCE_RS_M5_V2_EARLY",
+    "DOMINANCE_RS_M5_V3_STATE_MACHINE",
+}
 ALLOWED_BIASES = {"LONG_ONLY", "SHORT_ONLY", "NO_TRADE"}
 ALLOWED_STATES = {"UP", "DOWN", "FLAT"}
 
@@ -43,8 +47,9 @@ def validate_payload(payload):
     if not isinstance(payload, dict):
         return False, "Payload must be a JSON object."
 
-    if payload.get("scanner") != EXPECTED_SCANNER:
-        return False, f"scanner must equal {EXPECTED_SCANNER}"
+    scanner = payload.get("scanner")
+    if scanner not in ALLOWED_SCANNERS:
+        return False, f"scanner must be one of {sorted(ALLOWED_SCANNERS)}"
 
     timestamp = payload.get("timestamp")
     try:
@@ -199,7 +204,7 @@ def index():
         {
             "service": "dominance-scanner",
             "status": "ok",
-            "expected_scanner": EXPECTED_SCANNER,
+            "allowed_scanners": sorted(ALLOWED_SCANNERS),
             "sheets_configured": bool(SHEETS_WEB_APP_URL and SHEETS_SECRET),
         }
     )
